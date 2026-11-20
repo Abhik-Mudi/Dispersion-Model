@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Atmospheric Chemical Dispersion Simulator — dispersion_model.py</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ============ NAV ============ -->
+  <nav class="topnav">
+    <div class="inner">
+      <span class="logo">gas_dispersion</span>
+      <a href="#simulator" class="nav-highlight">⚡ Live Simulator</a>
+      <a href="#overview">Overview</a>
+      <a href="#equations">Equations</a>
+      <a href="#coefficients">Coefficients</a>
+    </div>
+  </nav>
+
+  <!-- ============ HERO ============ -->
+  <header class="hero">
+    <span class="hero-badge">Atmospheric Dispersion & Chemical Safety</span>
+    <h1>Spatial–Temporal <span class="grad">Chemical Dispersion</span> Simulator</h1>
+    <p class="sub">
+      Gaussian plume and puff models based on <code>dispersion_model.py</code> — computing downwind pollutant
+      concentration <em>C(x, y, z, t)</em>, breakthrough curves, and 2D spatial hazard distributions with
+      Pasquill–Gifford dispersion coefficients for rural &amp; urban terrain.
+    </p>
+    <div class="hero-file">dispersion_model.py</div>
+
+    <a href="#simulator" class="btn-primary-sim" style="text-decoration:none; margin-top:28px;">
+      <span>⚡</span> Launch Interactive Simulator &darr;
+    </a>
+
+    <div class="plume-anim" aria-hidden="true">
+      <span class="puff"></span>
+      <span class="puff"></span>
+      <span class="puff"></span>
+      <span class="puff"></span>
+      <span class="puff"></span>
+      <span class="source"></span>
+    </div>
+  </header>
+
+  <!-- ============ PRESET SCENARIOS RIBBON ============ -->
+  <section class="preset-section">
+    <div class="preset-container">
+      <div class="preset-title">
+        <span>⚡ Quick Scenario Presets:</span>
+      </div>
+      <div class="preset-pills">
+        <button type="button" class="preset-btn" data-preset="problem1_st1">
+          <span>🌫️</span> Problem 1: SO₂ Stack — Station 1 (x=500m, y=0m)
+          <span class="p-tag">Plume</span>
+        </button>
+        <button type="button" class="preset-btn" data-preset="problem1_st2">
+          <span>🌫️</span> Problem 1: SO₂ Stack — Station 2 (x=500m, y=50m)
+          <span class="p-tag">Plume</span>
+        </button>
+        <button type="button" class="preset-btn" data-preset="problem2_st1">
+          <span>💥</span> Problem 2: Cl₂ Tank — Station 1 (x=500m, y=0m)
+          <span class="p-tag">Puff</span>
+        </button>
+        <button type="button" class="preset-btn" data-preset="problem2_st2">
+          <span>💥</span> Problem 2: Cl₂ Tank — Station 2 (x=500m, y=50m)
+          <span class="p-tag">Puff</span>
+        </button>
+        <button type="button" class="preset-btn active" data-preset="default_cli">
+          <span>⚙️</span> Default CLI Simulator (Cl₂ Puff 50kg)
+          <span class="p-tag">Demo</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ INTERACTIVE SIMULATOR ============ -->
+  <section id="simulator">
+    <div class="sim-container">
+      <div class="section-head" style="margin-bottom:28px;">
+        <span class="kicker">Live Interactive Web Interface</span>
+        <h2>Atmospheric Dispersion Calculator &amp; Visualizer</h2>
+        <p class="lead">
+          Adjust release parameters, meteorological variables, and receptor coordinates below to evaluate real-time
+          concentration, arrival wavefronts, and 2D spatial plume/puff distributions.
+        </p>
+      </div>
+
+      <div class="sim-grid">
+        <!-- LEFT COLUMN: INPUT CONTROLS -->
+        <div class="sim-controls">
+
+          <!-- 1. Chemical Properties Card -->
+          <div class="sim-card">
+            <div class="sim-card-header">
+              <h3><span>🧪</span> 1. Chemical Substance</h3>
+              <span class="card-tag">Chemical Data</span>
+            </div>
+            <div class="form-group">
+              <label for="chemSelect">Select Chemical Preset:</label>
+              <select id="chemSelect" class="form-select">
+                <option value="Chlorine" selected>Chlorine (Cl₂) — MW: 70.9 g/mol</option>
+                <option value="Sulfur Dioxide">Sulfur Dioxide (SO₂) — MW: 64.07 g/mol</option>
+                <option value="Ammonia">Ammonia (NH₃) — MW: 17.03 g/mol</option>
+                <option value="Hydrogen Sulfide">Hydrogen Sulfide (H₂S) — MW: 34.08 g/mol</option>
+                <option value="Benzene">Benzene (C₆H₆) — MW: 78.11 g/mol</option>
+                <option value="Carbon Monoxide">Carbon Monoxide (CO) — MW: 28.01 g/mol</option>
+                <option value="Methane">Methane (CH₄) — MW: 16.04 g/mol</option>
+                <option value="Custom">Custom Chemical...</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="chemName">Chemical Name:</label>
+                <input type="text" id="chemName" class="input-box" value="Chlorine" />
+              </div>
+              <div class="form-group">
+                <label for="mwInput">Mol. Weight <span class="unit">(g/mol)</span>:</label>
+                <input type="number" id="mwInput" class="input-box" value="70.9" step="0.01" min="1.0" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Release Model & Strength Card -->
+          <div class="sim-card">
+            <div class="sim-card-header">
+              <h3><span>💨</span> 2. Release Model &amp; Source</h3>
+              <span class="card-tag">Source Term</span>
+            </div>
+            <div class="form-group">
+              <label>Dispersion Model Type:</label>
+              <div class="pill-radio-group">
+                <label class="pill-radio-label">
+                  <input type="radio" name="modelType" value="puff" checked />
+                  <span>💨 Instantaneous Puff</span>
+                </label>
+                <label class="pill-radio-label">
+                  <input type="radio" name="modelType" value="plume" />
+                  <span>🌫️ Continuous Plume</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label id="strengthLabel" for="sourceStrength">Total Released Mass (Qm*):</label>
+              <div class="input-unit-group">
+                <input type="number" id="sourceStrength" class="input-box" value="50.0" step="any" min="0.0001" />
+                <select id="sourceUnit" class="unit-select">
+                  <option value="kg" selected>kg</option>
+                  <option value="g">g</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="hrInput">Effective Release Height Hr <span class="unit">(meters)</span>:</label>
+              <div class="slider-row">
+                <input type="range" id="hrSlider" min="0" max="150" step="0.5" value="1.5" />
+                <input type="number" id="hrInput" class="input-box" value="1.5" step="0.5" min="0" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Meteorology & Environment Card -->
+          <div class="sim-card">
+            <div class="sim-card-header">
+              <h3><span>🌤️</span> 3. Weather &amp; Environment</h3>
+              <span class="card-tag">Atmosphere</span>
+            </div>
+            <div class="form-group">
+              <label for="uWind">Ambient Wind Speed u <span class="unit">(m/s)</span>:</label>
+              <div class="slider-row">
+                <input type="range" id="uWindSlider" min="0.5" max="25" step="0.5" value="3.0" />
+                <input type="number" id="uWind" class="input-box" value="3.0" step="0.1" min="0.1" />
+              </div>
+            </div>
+
+            <!-- Stability Class Mode Selection Slider -->
+            <div class="stability-mode-container">
+              <div class="stability-mode-header">
+                <label class="stability-header-label">Atmospheric Stability Determination:</label>
+                <div class="mode-slider-wrap">
+                  <button type="button" class="mode-pill-btn active" id="btnModeDirect" title="Directly select Pasquill-Gifford Stability Class A to F">
+                    <span>🎯</span> Direct Input
+                  </button>
+                  <label class="mode-slider-toggle" title="Slide toggle between Direct Input and Environment-Based Auto Prediction">
+                    <input type="checkbox" id="stabilityModeToggle" aria-label="Toggle between direct stability input and automatic environment prediction" />
+                    <span class="mode-slider-track">
+                      <span class="mode-slider-thumb"></span>
+                    </span>
+                  </label>
+                  <button type="button" class="mode-pill-btn" id="btnModeAuto" title="Automatically predict stability class from meteorological & environmental conditions">
+                    <span>🌤️</span> Auto-Predict (Environment)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Direct Input Section -->
+            <div id="directStabilitySection" class="stability-section-block active">
+              <div class="form-group" style="margin-bottom:8px;">
+                <div class="section-sub-header">
+                  <label>Pasquill–Gifford Atmospheric Stability Class:</label>
+                  <span class="mode-status-tag direct">Manual Direct</span>
+                </div>
+                <div class="pill-radio-group six-col">
+                  <label class="pill-radio-label" title="A — Extremely Unstable (Sunny, light wind)">
+                    <input type="radio" name="stability" value="A" />
+                    <span>A</span>
+                  </label>
+                  <label class="pill-radio-label" title="B — Moderately Unstable (Sunny, moderate wind)">
+                    <input type="radio" name="stability" value="B" />
+                    <span>B</span>
+                  </label>
+                  <label class="pill-radio-label" title="C — Slightly Unstable (Daytime, light clouds)">
+                    <input type="radio" name="stability" value="C" />
+                    <span>C</span>
+                  </label>
+                  <label class="pill-radio-label" title="D — Neutral (Overcast day/night, default)">
+                    <input type="radio" name="stability" value="D" checked />
+                    <span>D</span>
+                  </label>
+                  <label class="pill-radio-label" title="E — Slightly Stable (Night, light wind)">
+                    <input type="radio" name="stability" value="E" />
+                    <span>E</span>
+                  </label>
+                  <label class="pill-radio-label" title="F — Moderately Stable (Clear calm night)">
+                    <input type="radio" name="stability" value="F" />
+                    <span>F</span>
+                  </label>
+                </div>
+                <div class="stability-desc-hint" id="directStabilityHint">
+                  Selected: <strong>Class D</strong> — Neutral (Standard for overcast day or night)
+                </div>
+              </div>
+            </div>
+
+            <!-- Auto-Predict Environmental Section -->
+            <div id="autoStabilitySection" class="stability-section-block" style="display:none;">
+              <div class="env-predictor-box">
+                <div class="env-box-header">
+                  <div class="env-box-title">
+                    <span>🌤️</span> Environmental Conditions Predictor
+                  </div>
+                  <span class="mode-status-tag auto">Table 5-1 Model</span>
+                </div>
+                <p class="env-box-sub">
+                  Matches surface wind speed <em>u</em> and solar insolation / cloud cover using the textbook Pasquill–Gifford classification matrix.
+                </p>
+
+                <!-- Current Wind Speed Category Status -->
+                <div class="env-wind-status">
+                  <div class="env-wind-status-row">
+                    <span>Surface Wind Speed (10 m):</span>
+                    <strong id="envWindDisplay">3.0 m/s</strong>
+                    <span class="env-wind-bracket-pill" id="envWindBracketPill">3 – 4 m/s bracket</span>
+                  </div>
+                  <div class="env-wind-stepper" id="envWindStepper">
+                    <span class="wind-step" data-step="0">&lt; 2 m/s</span>
+                    <span class="wind-step" data-step="1">2 – 3 m/s</span>
+                    <span class="wind-step active" data-step="2">3 – 4 m/s</span>
+                    <span class="wind-step" data-step="3">4 – 6 m/s</span>
+                    <span class="wind-step" data-step="4">&gt; 6 m/s</span>
+                  </div>
+                </div>
+
+                <!-- Environmental Condition Radio Cards -->
+                <div class="form-group" style="margin-top:12px;">
+                  <label class="env-label">Select Incoming Solar Radiation / Night Sky Condition:</label>
+                  <div class="env-cond-list">
+                    <label class="env-cond-option">
+                      <input type="radio" name="envCondition" value="day_strong" />
+                      <div class="cond-card">
+                        <span class="cond-icon">☀️</span>
+                        <div class="cond-meta">
+                          <span class="cond-name">Daytime — Strong Insolation</span>
+                          <span class="cond-desc">Sunny midday, high solar radiation, clear sky (sun angle &gt; 60°)</span>
+                        </div>
+                      </div>
+                    </label>
+
+                    <label class="env-cond-option">
+                      <input type="radio" name="envCondition" value="day_moderate" />
+                      <div class="cond-card">
+                        <span class="cond-icon">⛅</span>
+                        <div class="cond-meta">
+                          <span class="cond-name">Daytime — Moderate Insolation</span>
+                          <span class="cond-desc">Moderate sun, slight cloudiness or haze (sun angle 35°–60°)</span>
+                        </div>
+                      </div>
+                    </label>
+
+                    <label class="env-cond-option">
+                      <input type="radio" name="envCondition" value="day_slight" />
+                      <div class="cond-card">
+                        <span class="cond-icon">🌤️</span>
+                        <div class="cond-meta">
+                          <span class="cond-name">Daytime — Slight Insolation</span>
+                          <span class="cond-desc">Low sun angle 15°–35° (morning/evening) or overcast sky</span>
+                        </div>
+                      </div>
+                    </label>
+
+                    <label class="env-cond-option">
+                      <input type="radio" name="envCondition" value="night_overcast" checked />
+                      <div class="cond-card">
+                        <span class="cond-icon">☁️</span>
+                        <div class="cond-meta">
+                          <span class="cond-name">Nighttime — Thin Overcast or &gt; 4/8 Low Cloud</span>
+                          <span class="cond-desc">Substantial cloud cover at night reducing radiational cooling</span>
+                        </div>
+                      </div>
+                    </label>
+
+                    <label class="env-cond-option">
+                      <input type="radio" name="envCondition" value="night_clear" />
+                      <div class="cond-card">
+                        <span class="cond-icon">🌙</span>
+                        <div class="cond-meta">
+                          <span class="cond-name">Nighttime — Clear Sky (&le; 3/8 Cloudiness)</span>
+                          <span class="cond-desc">Calm, clear sky with strong nighttime ground-level cooling</span>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Live Predicted Stability Result -->
+                <div class="env-pred-result" id="envPredResult">
+                  <div class="pred-result-header">
+                    <div class="pred-class-box">
+                      <span class="pred-pill D" id="predClassPill">Class D</span>
+                      <div class="pred-class-text">
+                        <span class="pred-title" id="predClassTitle">Neutral Atmospheric Stability</span>
+                        <span class="pred-subtitle" id="predClassSub">Auto-predicted from Table 5-1</span>
+                      </div>
+                    </div>
+                    <span class="pred-inserted-tag">
+                      <span class="check-icon">✓</span> Inserted into App
+                    </span>
+                  </div>
+
+                  <div class="pred-formula-explanation" id="predFormulaExplanation">
+                    Match: Wind <strong>3.0 m/s</strong> (3–4 m/s bracket) &times; <strong>Nighttime thin overcast</strong> &rarr; Predicts <strong>Class D</strong>.
+                  </div>
+
+                  <!-- Split Class Resolution (for A-B, B-C, C-D) -->
+                  <div class="pred-split-selector" id="predSplitSelector" style="display:none;">
+                    <span class="split-label">Table 5-1 specifies intermediate class <strong id="predSplitText">A–B</strong>. Select preferred variant:</span>
+                    <div class="split-btn-group" id="predSplitBtns">
+                      <!-- Populated via JS -->
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Collapsible Table 5-1 Matrix -->
+                <div class="matrix-accordion-wrap">
+                  <button type="button" class="matrix-toggle-btn" id="btnToggleMatrix">
+                    <span>📋 View Table 5-1 Matrix (from textbook screenshot)</span>
+                    <span class="accordion-arrow" id="matrixArrow">▼</span>
+                  </button>
+
+                  <div class="matrix-table-wrap" id="matrixTableContent" style="display:none;">
+                    <div class="matrix-table-caption">
+                      <strong>Table 5-1: Atmospheric Stability Classes for Use with the Pasquill-Gifford Dispersion Model</strong>
+                      <span class="caption-sub">Active cell dynamically highlighted in neon cyan</span>
+                    </div>
+                    <div class="table-scroll-wrap">
+                      <table class="pg-matrix-table" id="pgMatrixTable">
+                        <thead>
+                          <tr>
+                            <th rowspan="2" class="th-wind">Surface wind speed (m/s)</th>
+                            <th colspan="3" class="th-group-day">Daytime insolation<sup>3</sup></th>
+                            <th colspan="2" class="th-group-night">Nighttime conditions<sup>4</sup></th>
+                          </tr>
+                          <tr>
+                            <th class="th-col" data-col="day_strong">Strong</th>
+                            <th class="th-col" data-col="day_moderate">Moderate</th>
+                            <th class="th-col" data-col="day_slight">Slight</th>
+                            <th class="th-col" data-col="night_overcast">Thin overcast or &gt;4/8 low cloud</th>
+                            <th class="th-col" data-col="night_clear">&le;3/8 cloudiness</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr data-row="0">
+                            <td class="td-wind">&lt; 2</td>
+                            <td data-col="day_strong" class="td-cell">A</td>
+                            <td data-col="day_moderate" class="td-cell">A–B</td>
+                            <td data-col="day_slight" class="td-cell">B</td>
+                            <td data-col="night_overcast" class="td-cell">F<sup>5</sup></td>
+                            <td data-col="night_clear" class="td-cell">F<sup>5</sup></td>
+                          </tr>
+                          <tr data-row="1">
+                            <td class="td-wind">2 – 3</td>
+                            <td data-col="day_strong" class="td-cell">A–B</td>
+                            <td data-col="day_moderate" class="td-cell">B</td>
+                            <td data-col="day_slight" class="td-cell">C</td>
+                            <td data-col="night_overcast" class="td-cell">E</td>
+                            <td data-col="night_clear" class="td-cell">F</td>
+                          </tr>
+                          <tr data-row="2">
+                            <td class="td-wind">3 – 4</td>
+                            <td data-col="day_strong" class="td-cell">B</td>
+                            <td data-col="day_moderate" class="td-cell">B–C</td>
+                            <td data-col="day_slight" class="td-cell">C</td>
+                            <td data-col="night_overcast" class="td-cell">D<sup>6</sup></td>
+                            <td data-col="night_clear" class="td-cell">E</td>
+                          </tr>
+                          <tr data-row="3">
+                            <td class="td-wind">4 – 6</td>
+                            <td data-col="day_strong" class="td-cell">C</td>
+                            <td data-col="day_moderate" class="td-cell">C–D</td>
+                            <td data-col="day_slight" class="td-cell">D<sup>6</sup></td>
+                            <td data-col="night_overcast" class="td-cell">D<sup>6</sup></td>
+                            <td data-col="night_clear" class="td-cell">D<sup>6</sup></td>
+                          </tr>
+                          <tr data-row="4">
+                            <td class="td-wind">&gt; 6</td>
+                            <td data-col="day_strong" class="td-cell">C</td>
+                            <td data-col="day_moderate" class="td-cell">D<sup>6</sup></td>
+                            <td data-col="day_slight" class="td-cell">D<sup>6</sup></td>
+                            <td data-col="night_overcast" class="td-cell">D<sup>6</sup></td>
+                            <td data-col="night_clear" class="td-cell">D<sup>6</sup></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div class="matrix-footnotes">
+                      <p><sup>3</sup> Strong insolation corresponds to sunny midday; slight insolation corresponds to early morning/evening or cloudiness.</p>
+                      <p><sup>4</sup> Night refers to the period from 1 hour before sunset to 1 hour after sunrise.</p>
+                      <p><sup>5</sup> For wind &lt; 2 m/s at night, moderately stable class F is assumed.</p>
+                      <p><sup>6</sup> The neutral class, D, should be assumed for overcast conditions during day or night.</p>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Terrain Surface:</label>
+                <div class="pill-radio-group">
+                  <label class="pill-radio-label">
+                    <input type="radio" name="terrain" value="rural" checked />
+                    <span>🌾 Rural</span>
+                  </label>
+                  <label class="pill-radio-label">
+                    <input type="radio" name="terrain" value="urban" />
+                    <span>🏙️ Urban</span>
+                  </label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="thresholdInput">Hazard Threshold <span class="unit">(ppm)</span>:</label>
+                <input type="number" id="thresholdInput" class="input-box" value="3.0" step="0.1" min="0.0001" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Query Coordinates & Time Card -->
+          <div class="sim-card">
+            <div class="sim-card-header">
+              <h3><span>🎯</span> 4. Receptor Point &amp; Time Query</h3>
+              <span class="card-tag">Query (x, y, z, t)</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="xQuery">Downwind x <span class="unit">(meters)</span>:</label>
+                <input type="number" id="xQuery" class="input-box" value="300.0" step="10" min="0" />
+              </div>
+              <div class="form-group">
+                <label for="yQuery">Crosswind y <span class="unit">(meters)</span>:</label>
+                <input type="number" id="yQuery" class="input-box" value="0.0" step="5" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="zQuery">Elevation z <span class="unit">(m above ground)</span>:</label>
+                <input type="number" id="zQuery" class="input-box" value="0.0" step="0.5" min="0" />
+              </div>
+              <div class="form-group">
+                <label for="tQuery">Instant of Time t <span class="unit">(seconds)</span>:</label>
+                <input type="number" id="tQuery" class="input-box" value="100.0" step="5" min="0" />
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:4px;">
+              <label for="tQuerySlider">Time Slider <span class="unit">(0 to 300 s)</span>:</label>
+              <input type="range" id="tQuerySlider" min="1" max="300" step="1" value="100" />
+            </div>
+
+            <div class="sim-actions">
+              <button type="button" id="runBtn" class="btn-primary-sim">
+                <span>⚡</span> Run Simulation
+              </button>
+              <label class="auto-calc-label">
+                <input type="checkbox" id="autoCalcToggle" checked />
+                <span>Auto-Calculate</span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN: RESULTS & VISUALIZATIONS -->
+        <div class="sim-results">
+
+          <!-- 1. Hazard Alert Banner -->
+          <div id="hazardAlert" class="alert-banner safe">
+            <div class="alert-icon">✅</div>
+            <div class="alert-content">
+              <h4>CONCENTRATION WITHIN LIMITS</h4>
+              <p>Evaluating concentration at the receptor point...</p>
+            </div>
+          </div>
+
+          <!-- 2. Primary Metrics Cards -->
+          <div class="metrics-grid">
+            <div class="metric-box" id="metricCardPpm">
+              <div class="metric-label">
+                <span>Concentration</span>
+                <span id="resStatusBadge" class="badge success">SAFE</span>
+              </div>
+              <div class="metric-val" id="resPpm">0.0000 ppm</div>
+              <div class="metric-sub" id="resPeak">Peak: 0.00 ppm @ 0.0s</div>
+            </div>
+
+            <div class="metric-box">
+              <div class="metric-label">
+                <span>Mass Concentration</span>
+                <span class="badge" style="background:rgba(255,255,255,0.08); color:var(--ink-dim);">SI Units</span>
+              </div>
+              <div class="metric-val" id="resMgM3">0.0000 mg/m³</div>
+              <div class="metric-sub" id="resKgM3">0.000000e+00 kg/m³</div>
+            </div>
+
+            <div class="metric-box">
+              <div class="metric-label">
+                <span>Advection Status</span>
+                <span class="badge" style="background:rgba(76,201,240,0.15); color:var(--accent);">Dynamics</span>
+              </div>
+              <div class="metric-val" id="resArrival">Arrived</div>
+              <div class="metric-sub" id="resFrontDist">Front: 0.0 m</div>
+            </div>
+          </div>
+
+          <!-- Secondary Metric Bar -->
+          <div style="background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 16px; margin-bottom:20px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:0.83rem; color:var(--ink-dim); font-family:var(--mono);">
+            <div><strong>Dispersion Spread:</strong> <span id="resSigmas" style="color:var(--accent);">σy = 0.00 m | σz = 0.00 m</span></div>
+            <div><strong>Gas Volume Factor:</strong> <span style="color:var(--green);">24.45 L/mol @ 25°C, 1 atm</span></div>
+          </div>
+
+          <!-- 3. Visualization Container -->
+          <div class="viz-container">
+            <div class="viz-nav-header">
+              <div class="viz-tabs">
+                <button type="button" class="viz-tab-btn active" data-tab="contour">
+                  <span>🗺️</span> 2D Spatial Heatmap
+                </button>
+                <button type="button" class="viz-tab-btn" data-tab="breakthrough">
+                  <span>📈</span> Breakthrough Curve C(t)
+                </button>
+                <button type="button" class="viz-tab-btn" data-tab="profiles">
+                  <span>📉</span> Spatial Profiles
+                </button>
+              </div>
+              <div class="subtabs" id="profileSubtabs" style="display:none;">
+                <button type="button" class="profile-subtab active" data-subtab="crosswind">Crosswind C(y)</button>
+                <button type="button" class="profile-subtab" data-subtab="downwind">Downwind C(x)</button>
+              </div>
+            </div>
+
+            <!-- Tab 1: 2D Spatial Heatmap Canvas -->
+            <div id="panel_contour" class="viz-panel active">
+              <div class="canvas-wrapper">
+                <canvas id="contourCanvas" width="900" height="480"></canvas>
+              </div>
+              <p style="font-size:0.75rem; color:var(--ink-dim); margin-top:8px; display:flex; justify-content:space-between;">
+                <span>💡 Hover over the canvas to inspect local coordinates and concentration.</span>
+                <span>🔴 Dashed line = Hazard threshold contour isopleth.</span>
+              </p>
+            </div>
+
+            <!-- Tab 2: Breakthrough Curve Canvas -->
+            <div id="panel_breakthrough" class="viz-panel">
+              <div class="canvas-wrapper">
+                <canvas id="timeCanvas" width="900" height="420"></canvas>
+              </div>
+              <p style="font-size:0.75rem; color:var(--ink-dim); margin-top:8px;">
+                Shows temporal concentration variation C(t) at receptor (x, y, z) with hazard limit reference.
+              </p>
+            </div>
+
+            <!-- Tab 3: Spatial Profiles Canvas -->
+            <div id="panel_profiles" class="viz-panel">
+              <div class="canvas-wrapper">
+                <canvas id="profileCanvas" width="900" height="420"></canvas>
+              </div>
+              <p style="font-size:0.75rem; color:var(--ink-dim); margin-top:8px;">
+                Gaussian crosswind distribution C(y) at receptor distance and centerline downwind profile C(x).
+              </p>
+            </div>
+          </div>
+
+          <!-- 4. Formatted Terminal Report Card -->
+          <div class="report-container">
+            <div class="report-header">
+              <h4><span>📋</span> Formatted Dispersion Simulation Report</h4>
+              <button type="button" id="copyReportBtn" class="btn-secondary">
+                <span>📄</span> Copy Report
+              </button>
+            </div>
+            <pre id="reportText">Calculating initial dispersion state...</pre>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OVERVIEW ============ -->
+  <section id="overview">
+    <div class="container">
+      <div class="section-head">
+        <span class="kicker">01 — Overview</span>
+        <h2>Two Release Models, One Framework</h2>
+        <p class="lead">
+          The module supports two canonical Gaussian atmospheric dispersion scenarios,
+          each evaluated at any point in space and instant in time, with ground reflection
+          via the mirror-image source term.
+        </p>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <span class="icon">🌫️</span>
+          <h3>Continuous Plume Release</h3>
+          <p>
+            Steady-state release rate <span class="inline-code">Qm</span> (kg/s) from an
+            elevated source. A steady Gaussian plume is advected downwind, gated by an
+            advection wavefront: concentration is zero until the plume front
+            <span class="inline-code">x&nbsp;=&nbsp;u·t</span> arrives at the receptor.
+          </p>
+          <span class="tag">PLUME MODEL</span>
+        </div>
+        <div class="card">
+          <span class="icon">💨</span>
+          <h3>Instantaneous Puff Release</h3>
+          <p>
+            Fixed total mass <span class="inline-code">Qm*</span> (kg) released at once,
+            forming a transient Gaussian puff whose center travels with the wind at
+            <span class="inline-code">x<sub>center</sub> = u·t</span> while the cloud
+            grows in all three directions.
+          </p>
+          <span class="tag pink">PUFF MODEL</span>
+        </div>
+      </div>
+
+      <div class="grid three" style="margin-top:22px;">
+        <div class="card">
+          <span class="icon">📐</span>
+          <h3>Stability Classes A–F</h3>
+          <p>Pasquill–Gifford correlations parameterize plume spread for conditions from strongly unstable (A) to strongly stable (F).</p>
+          <span class="tag gold">6 CLASSES</span>
+        </div>
+        <div class="card">
+          <span class="icon">🏙️</span>
+          <h3>Rural &amp; Urban Terrain</h3>
+          <p>Separate coefficient sets account for enhanced mechanical and thermal turbulence over built-up areas.</p>
+          <span class="tag">2 TERRAINS</span>
+        </div>
+        <div class="card">
+          <span class="icon">⚠️</span>
+          <h3>Hazard Thresholds</h3>
+          <p>Results are compared against exposure limits (e.g., ERPG-2 in ppm) to flag exceedance at monitoring stations.</p>
+          <span class="tag pink">SAFETY</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EQUATIONS ============ -->
+  <section id="equations" class="alt">
+    <div class="container">
+      <div class="section-head">
+        <span class="kicker">02 — Governing Equations</span>
+        <h2>The Gaussian Solutions</h2>
+        <p class="lead">
+          Both models include ground reflection by superposing an image source at −H<sub>r</sub>,
+          so near-ground concentrations are effectively doubled.
+        </p>
+      </div>
+
+      <div class="grid two">
+        <div>
+          <h3 style="margin-bottom:6px;">Plume — steady concentration</h3>
+          <div class="equation-box">
+            C(x, y, z) =
+            <span class="frac">
+              <span class="top">Q<sub>m</sub></span>
+              <span class="bottom">2π σ<sub>y</sub> σ<sub>z</sub> u</span>
+            </span>
+            exp( −<span class="frac"><span class="top">y²</span><span class="bottom">2σ<sub>y</sub>²</span></span> )
+            · [ exp(−<span class="frac"><span class="top">(z − H<sub>r</sub>)²</span><span class="bottom">2σ<sub>z</sub>²</span></span>) + exp(−<span class="frac"><span class="top">(z + H<sub>r</sub>)²</span><span class="bottom">2σ<sub>z</sub>²</span></span>) ]
+          </div>
+          <p class="eq-note">
+            Active only where the advection front <code>x = u·t</code> has passed; otherwise C = 0.
+          </p>
+        </div>
+
+        <div>
+          <h3 style="margin-bottom:6px;">Puff — transient concentration</h3>
+          <div class="equation-box pink">
+            C(x, y, z, t) =
+            <span class="frac">
+              <span class="top">Q<sub>m</sub>*</span>
+              <span class="bottom">(2π)<sup>3/2</sup> σ<sub>x</sub> σ<sub>y</sub> σ<sub>z</sub></span>
+            </span>
+            exp( −<span class="frac"><span class="top">(x − u·t)²</span><span class="bottom">2σ<sub>x</sub>²</span></span> )
+            · exp( −<span class="frac"><span class="top">y²</span><span class="bottom">2σ<sub>y</sub>²</span></span> )
+            · [ exp(−<span class="frac"><span class="top">(z − H<sub>r</sub>)²</span><span class="bottom">2σ<sub>z</sub>²</span></span>) + exp(−<span class="frac"><span class="top">(z + H<sub>r</sub>)²</span><span class="bottom">2σ<sub>z</sub>²</span></span>) ]
+          </div>
+          <p class="eq-note">
+            σ<sub>x</sub> = σ<sub>y</sub> — isotropic horizontal turbulence assumption.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid three" style="margin-top:26px;">
+        <div class="card">
+          <h3>Unit Conversions</h3>
+          <p>
+            kg/m³ → mg/m³: ×10⁶<br />
+            kg/m³ → ppm: × (24.45 × 10⁶ / MW)<br />
+            where MW is molecular weight (g/mol) and 24.45 L/mol is the molar volume at 25 °C, 1 atm.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Advection Front</h3>
+          <p>
+            Plume front position: <code>x<sub>front</sub> = u · t</code><br />
+            Expected arrival time: <code>t<sub>arrival</sub> = x / u</code><br />
+            Puff center: <code>x<sub>center</sub> = u · t</code>
+          </p>
+        </div>
+        <div class="card">
+          <h3>Sigma Floor</h3>
+          <p>
+            Downwind distance is clamped to a minimum of <code>0.1 m</code>
+            (<code>np.maximum(x, 0.1)</code>) to prevent singularity at the source.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COEFFICIENTS ============ -->
+  <section id="coefficients">
+    <div class="container">
+      <div class="section-head">
+        <span class="kicker">03 — Dispersion Coefficients</span>
+        <h2>Pasquill–Gifford Correlations</h2>
+        <p class="lead">
+          Plume coefficients are power-law forms with finite-distance corrections;
+          puff coefficients follow Slade (1968) quasi-instantaneous correlations
+          σ = a·x<sup>b</sup>.
+        </p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Class</th>
+              <th>Condition</th>
+              <th>Rural σ<sub>y</sub></th>
+              <th>Rural σ<sub>z</sub></th>
+              <th>Urban σ<sub>y</sub></th>
+              <th>Urban σ<sub>z</sub></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="pill A">A</span>Extremely unstable</td>
+              <td>Sunny, light wind</td>
+              <td><code>0.22x(1+0.0001x)⁻⁰·⁵</code></td><td><code>0.20x</code></td>
+              <td rowspan="2"><code>0.32x(1+0.0004x)⁻⁰·⁵</code></td>
+              <td rowspan="2"><code>0.24x(1+0.001x)⁰·⁵</code></td>
+            </tr>
+            <tr>
+              <td><span class="pill B">B</span>Moderately unstable</td>
+              <td>Sunny, moderate wind</td>
+              <td><code>0.16x(1+0.0001x)⁻⁰·⁵</code></td><td><code>0.12x</code></td>
+            </tr>
+            <tr>
+              <td><span class="pill C">C</span>Slightly unstable</td>
+              <td>Day, light cloud</td>
+              <td><code>0.11x(1+0.0001x)⁻⁰·⁵</code></td><td><code>0.08x(1+0.0002x)⁻⁰·⁵</code></td>
+              <td><code>0.22x(1+0.0004x)⁻⁰·⁵</code></td><td><code>0.20x</code></td>
+            </tr>
+            <tr>
+              <td><span class="pill D">D</span>Neutral (default)</td>
+              <td>Overcast day/night</td>
+              <td><code>0.08x(1+0.0001x)⁻⁰·⁵</code></td><td><code>0.06x(1+0.0015x)⁻⁰·⁵</code></td>
+              <td><code>0.16x(1+0.0004x)⁻⁰·⁵</code></td><td><code>0.14x(1+0.0003x)⁻⁰·⁵</code></td>
+            </tr>
+            <tr>
+              <td><span class="pill E">E</span>Stable</td>
+              <td>Evening, light wind</td>
+              <td><code>0.06x(1+0.0001x)⁻⁰·⁵</code></td><td><code>0.03x(1+0.0003x)⁻¹</code></td>
+              <td rowspan="2"><code>0.11x(1+0.0004x)⁻⁰·⁵</code></td>
+              <td rowspan="2"><code>0.08x(1+0.0015x)⁻⁰·⁵</code></td>
+            </tr>
+            <tr>
+              <td><span class="pill F">F</span>Very stable</td>
+              <td>Clear night</td>
+              <td><code>0.04x(1+0.0001x)⁻⁰·⁵</code></td><td><code>0.016x(1+0.0003x)⁻¹</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap" style="margin-top:24px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Class</th>
+              <th>Puff σ<sub>y</sub> = a·x<sup>b</sup></th>
+              <th>Puff σ<sub>z</sub> = c·x<sup>d</sup></th>
+              <th>Assumption</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="pill A">A</span></td><td><code>0.18 x^0.92</code></td><td><code>0.60 x^0.75</code></td><td rowspan="6" style="vertical-align:middle;"><code>σ<sub>x</sub> = σ<sub>y</sub></code> (isotropic horizontal turbulence)</td></tr>
+            <tr><td><span class="pill B">B</span></td><td><code>0.14 x^0.92</code></td><td><code>0.53 x^0.73</code></td></tr>
+            <tr><td><span class="pill C">C</span></td><td><code>0.10 x^0.92</code></td><td><code>0.34 x^0.71</code></td></tr>
+            <tr><td><span class="pill D">D</span></td><td><code>0.06 x^0.92</code></td><td><code>0.15 x^0.70</code></td></tr>
+            <tr><td><span class="pill E">E</span></td><td><code>0.04 x^0.92</code></td><td><code>0.10 x^0.65</code></td></tr>
+            <tr><td><span class="pill F">F</span></td><td><code>0.02 x^0.89</code></td><td><code>0.05 x^0.61</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer>
+    <p>
+      Interactive Web Interface for <code>dispersion_model.py</code> — Gaussian Plume &amp; Puff
+      Atmospheric Dispersion Simulation Suite · Python 3 &middot; HTML5 Canvas &middot; NumPy
+    </p>
+    <p style="margin-top:6px;">Run server with <code>python app.py</code> or open <code>index.html</code> directly in any browser.</p>
+  </footer>
+
+  <!-- Hover Tooltip for 2D Canvas -->
+  <div id="contourTooltip" class="canvas-tooltip"></div>
+
+  <!-- Interactive Simulator Script -->
+  <script src="simulator.js"></script>
+
+</body>
+</html>
