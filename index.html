@@ -9,13 +9,25 @@
 <body>
 
   <!-- ============ NAV ============ -->
-  <nav class="topnav">
+  <nav class="topnav" id="topNav">
     <div class="inner">
-      <span class="logo">gas_dispersion</span>
-      <a href="#simulator" class="nav-highlight">⚡ Live Simulator</a>
-      <a href="#overview">Overview</a>
-      <a href="#equations">Equations</a>
-      <a href="#coefficients">Coefficients</a>
+      <div class="nav-brand">
+        <a href="#" class="logo">gas_dispersion</a>
+      </div>
+      <div class="nav-actions-mobile">
+        <a href="#simulator" class="nav-highlight mobile-quick-sim">⚡ Sim</a>
+        <button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle navigation menu" aria-expanded="false">
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+        </button>
+      </div>
+      <div class="nav-menu" id="navMenu">
+        <a href="#simulator" class="nav-link nav-highlight">⚡ Live Simulator</a>
+        <a href="#overview" class="nav-link">Overview</a>
+        <a href="#equations" class="nav-link">Equations</a>
+        <a href="#coefficients" class="nav-link">Coefficients</a>
+      </div>
     </div>
   </nav>
 
@@ -30,7 +42,7 @@
     </p>
     <div class="hero-file">dispersion_model.py</div>
 
-    <a href="#simulator" class="btn-primary-sim" style="text-decoration:none; margin-top:28px;">
+    <a href="#simulator" class="btn-primary-sim hero-sim-btn">
       <span>⚡</span> Launch Interactive Simulator &darr;
     </a>
 
@@ -47,28 +59,35 @@
   <!-- ============ PRESET SCENARIOS RIBBON ============ -->
   <section class="preset-section">
     <div class="preset-container">
-      <div class="preset-title">
-        <span>⚡ Quick Scenario Presets:</span>
+      <div class="preset-header-row">
+        <div class="preset-title">
+          <span>⚡ Quick Scenario Presets:</span>
+        </div>
+        <span class="preset-scroll-hint">← Swipe horizontally →</span>
       </div>
       <div class="preset-pills">
         <button type="button" class="preset-btn" data-preset="problem1_st1">
-          <span>🌫️</span> Problem 1: SO₂ Stack — Station 1 (x=500m, y=0m)
+          <span>🌫️</span> <strong>Problem 1: SO₂ Stack (St. 1)</strong>
+          <span class="p-coords">x=500m, y=0m</span>
           <span class="p-tag">Plume</span>
         </button>
         <button type="button" class="preset-btn" data-preset="problem1_st2">
-          <span>🌫️</span> Problem 1: SO₂ Stack — Station 2 (x=500m, y=50m)
+          <span>🌫️</span> <strong>Problem 1: SO₂ Stack (St. 2)</strong>
+          <span class="p-coords">x=500m, y=50m</span>
           <span class="p-tag">Plume</span>
         </button>
         <button type="button" class="preset-btn" data-preset="problem2_st1">
-          <span>💥</span> Problem 2: Cl₂ Tank — Station 1 (x=500m, y=0m)
+          <span>💥</span> <strong>Problem 2: Cl₂ Tank (St. 1)</strong>
+          <span class="p-coords">x=500m, y=0m</span>
           <span class="p-tag">Puff</span>
         </button>
         <button type="button" class="preset-btn" data-preset="problem2_st2">
-          <span>💥</span> Problem 2: Cl₂ Tank — Station 2 (x=500m, y=50m)
+          <span>💥</span> <strong>Problem 2: Cl₂ Tank (St. 2)</strong>
+          <span class="p-coords">x=500m, y=50m</span>
           <span class="p-tag">Puff</span>
         </button>
         <button type="button" class="preset-btn active" data-preset="default_cli">
-          <span>⚙️</span> Default CLI Simulator (Cl₂ Puff 50kg)
+          <span>⚙️</span> <strong>Default Demo (Cl₂ Puff 50kg)</strong>
           <span class="p-tag">Demo</span>
         </button>
       </div>
@@ -78,7 +97,7 @@
   <!-- ============ INTERACTIVE SIMULATOR ============ -->
   <section id="simulator">
     <div class="sim-container">
-      <div class="section-head" style="margin-bottom:28px;">
+      <div class="section-head">
         <span class="kicker">Live Interactive Web Interface</span>
         <h2>Atmospheric Dispersion Calculator &amp; Visualizer</h2>
         <p class="lead">
@@ -87,7 +106,18 @@
         </p>
       </div>
 
-      <div class="sim-grid">
+      <!-- Mobile View Switcher (Visible on <= 900px) -->
+      <div class="sim-mobile-nav" id="simMobileNav">
+        <button type="button" class="sim-mnav-btn active" id="btnMobControls">
+          <span>⚙️</span> Parameters &amp; Controls
+        </button>
+        <button type="button" class="sim-mnav-btn" id="btnMobResults">
+          <span>📊</span> Live Results &amp; Charts
+          <span class="mob-alert-dot" id="mobAlertDot"></span>
+        </button>
+      </div>
+
+      <div class="sim-grid view-controls" id="simGrid">
         <!-- LEFT COLUMN: INPUT CONTROLS -->
         <div class="sim-controls">
 
@@ -180,7 +210,7 @@
                 <label class="stability-header-label">Atmospheric Stability Determination:</label>
                 <div class="mode-slider-wrap">
                   <button type="button" class="mode-pill-btn active" id="btnModeDirect" title="Directly select Pasquill-Gifford Stability Class A to F">
-                    <span>🎯</span> Direct Input
+                    <span>🎯</span> <span class="btn-text-full">Direct Input</span><span class="btn-text-short">Direct</span>
                   </button>
                   <label class="mode-slider-toggle" title="Slide toggle between Direct Input and Environment-Based Auto Prediction">
                     <input type="checkbox" id="stabilityModeToggle" aria-label="Toggle between direct stability input and automatic environment prediction" />
@@ -189,7 +219,7 @@
                     </span>
                   </label>
                   <button type="button" class="mode-pill-btn" id="btnModeAuto" title="Automatically predict stability class from meteorological & environmental conditions">
-                    <span>🌤️</span> Auto-Predict (Environment)
+                    <span>🌤️</span> <span class="btn-text-full">Auto-Predict (Environment)</span><span class="btn-text-short">Auto-Predict</span>
                   </button>
                 </div>
               </div>
@@ -365,6 +395,7 @@
                       <span class="caption-sub">Active cell dynamically highlighted in neon cyan</span>
                     </div>
                     <div class="table-scroll-wrap">
+                      <div class="table-scroll-hint">← Swipe to view full matrix →</div>
                       <table class="pg-matrix-table" id="pgMatrixTable">
                         <thead>
                           <tr>
@@ -496,12 +527,18 @@
                 <span>Auto-Calculate</span>
               </label>
             </div>
+            <button type="button" class="mob-jump-results-btn" id="mobJumpResultsBtn">
+              <span>📊</span> View Results &amp; Charts &darr;
+            </button>
           </div>
 
         </div>
 
         <!-- RIGHT COLUMN: RESULTS & VISUALIZATIONS -->
         <div class="sim-results">
+          <button type="button" class="mob-back-controls-btn" id="mobBackControlsBtn">
+            <span>&larr;</span> Back to Parameter Controls
+          </button>
 
           <!-- 1. Hazard Alert Banner -->
           <div id="hazardAlert" class="alert-banner safe">
@@ -543,7 +580,7 @@
           </div>
 
           <!-- Secondary Metric Bar -->
-          <div style="background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 16px; margin-bottom:20px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:0.83rem; color:var(--ink-dim); font-family:var(--mono);">
+          <div class="secondary-metric-bar">
             <div><strong>Dispersion Spread:</strong> <span id="resSigmas" style="color:var(--accent);">σy = 0.00 m | σz = 0.00 m</span></div>
             <div><strong>Gas Volume Factor:</strong> <span style="color:var(--green);">24.45 L/mol @ 25°C, 1 atm</span></div>
           </div>
@@ -553,13 +590,13 @@
             <div class="viz-nav-header">
               <div class="viz-tabs">
                 <button type="button" class="viz-tab-btn active" data-tab="contour">
-                  <span>🗺️</span> 2D Spatial Heatmap
+                  <span>🗺️</span> <span class="tab-text-full">2D Spatial Heatmap</span><span class="tab-text-short">2D Heatmap</span>
                 </button>
                 <button type="button" class="viz-tab-btn" data-tab="breakthrough">
-                  <span>📈</span> Breakthrough Curve C(t)
+                  <span>📈</span> <span class="tab-text-full">Breakthrough Curve C(t)</span><span class="tab-text-short">Breakthrough</span>
                 </button>
                 <button type="button" class="viz-tab-btn" data-tab="profiles">
-                  <span>📉</span> Spatial Profiles
+                  <span>📉</span> <span class="tab-text-full">Spatial Profiles</span><span class="tab-text-short">Profiles</span>
                 </button>
               </div>
               <div class="subtabs" id="profileSubtabs" style="display:none;">
@@ -573,8 +610,8 @@
               <div class="canvas-wrapper">
                 <canvas id="contourCanvas" width="900" height="480"></canvas>
               </div>
-              <p style="font-size:0.75rem; color:var(--ink-dim); margin-top:8px; display:flex; justify-content:space-between;">
-                <span>💡 Hover over the canvas to inspect local coordinates and concentration.</span>
+              <p class="canvas-caption">
+                <span>💡 Hover or tap on the canvas to inspect local coordinates and concentration.</span>
                 <span>🔴 Dashed line = Hazard threshold contour isopleth.</span>
               </p>
             </div>
@@ -584,8 +621,8 @@
               <div class="canvas-wrapper">
                 <canvas id="timeCanvas" width="900" height="420"></canvas>
               </div>
-              <p style="font-size:0.75rem; color:var(--ink-dim); margin-top:8px;">
-                Shows temporal concentration variation C(t) at receptor (x, y, z) with hazard limit reference.
+              <p class="canvas-caption">
+                <span>Shows temporal concentration variation C(t) at receptor (x, y, z) with hazard limit reference.</span>
               </p>
             </div>
 
@@ -594,8 +631,8 @@
               <div class="canvas-wrapper">
                 <canvas id="profileCanvas" width="900" height="420"></canvas>
               </div>
-              <p style="font-size:0.75rem; color:var(--ink-dim); margin-top:8px;">
-                Gaussian crosswind distribution C(y) at receptor distance and centerline downwind profile C(x).
+              <p class="canvas-caption">
+                <span>Gaussian crosswind distribution C(y) at receptor distance and centerline downwind profile C(x).</span>
               </p>
             </div>
           </div>
@@ -766,6 +803,7 @@
       </div>
 
       <div class="table-wrap">
+        <div class="table-scroll-hint">← Swipe horizontally to view full table →</div>
         <table>
           <thead>
             <tr>
@@ -819,6 +857,7 @@
       </div>
 
       <div class="table-wrap" style="margin-top:24px;">
+        <div class="table-scroll-hint">← Swipe horizontally to view full table →</div>
         <table>
           <thead>
             <tr>
@@ -852,6 +891,17 @@
 
   <!-- Hover Tooltip for 2D Canvas -->
   <div id="contourTooltip" class="canvas-tooltip"></div>
+
+  <!-- Floating Quick Actions for Mobile & Tablet -->
+  <div class="mobile-floating-actions" id="floatingActions">
+    <a href="#simulator" class="floating-btn sim-btn" title="Jump to Live Simulator">
+      <span>⚡</span>
+      <span class="floating-label">Simulator</span>
+    </a>
+    <button type="button" class="floating-btn top-btn" id="btnBackToTop" title="Back to top" aria-label="Scroll to top">
+      <span>↑</span>
+    </button>
+  </div>
 
   <!-- Interactive Simulator Script -->
   <script src="simulator.js"></script>

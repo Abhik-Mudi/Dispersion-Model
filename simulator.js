@@ -772,6 +772,12 @@ function renderResults(res) {
     valPeak.innerText = `Peak: ${formatSci(p.peak_ppm, 3)} ppm @ ${p.t_peak_sec.toFixed(1)}s`;
   }
 
+  // Update Mobile Navigation Alert Dot
+  const mobAlertDot = document.getElementById("mobAlertDot");
+  if (mobAlertDot) {
+    mobAlertDot.className = p.exceeds ? "mob-alert-dot danger" : "mob-alert-dot";
+  }
+
   // 3. Render Active Visualization Tab
   renderActiveVisualization();
 
@@ -791,15 +797,65 @@ function renderActiveVisualization() {
 }
 
 // ----------------------------------------------------------------------------
+// RESPONSIVE CANVAS SIZING HELPER (HiDPI / DPR & Mobile Responsive)
+// ----------------------------------------------------------------------------
+
+function setupResponsiveCanvas(canvas, defaultAspect = 900 / 480) {
+  const container = canvas.parentElement;
+  let clientW = container ? container.clientWidth : 0;
+  // If hidden (e.g. inside a display:none tab or parent view), fallback to parent or window
+  if (!clientW || clientW < 50) {
+    const card = canvas.closest(".viz-container") || canvas.closest(".sim-results") || canvas.closest(".container");
+    clientW = card ? (card.clientWidth - 36) : (window.innerWidth ? Math.min(window.innerWidth - 32, 900) : 900);
+  }
+  if (!clientW || clientW < 200) clientW = 320;
+  clientW = Math.min(clientW, 1000);
+
+  // Aspect ratio adjustment for mobile phones
+  let aspect = defaultAspect;
+  if (clientW < 440) {
+    aspect = Math.min(defaultAspect, 1.35); // taller on mobile phones for better graph readability
+  } else if (clientW < 700) {
+    aspect = Math.min(defaultAspect, 1.55);
+  }
+
+  const clientH = Math.round(clientW / aspect);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+
+  const pixelW = Math.round(clientW * dpr);
+  const pixelH = Math.round(clientH * dpr);
+
+  if (canvas.width !== pixelW || canvas.height !== pixelH) {
+    canvas.width = pixelW;
+    canvas.height = pixelH;
+  }
+  canvas.style.width = clientW + "px";
+  canvas.style.height = clientH + "px";
+
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const isSmall = clientW < 480;
+  const isMed = clientW < 720;
+
+  return {
+    ctx,
+    width: clientW,
+    height: clientH,
+    dpr,
+    isSmall,
+    isMed
+  };
+}
+
+// ----------------------------------------------------------------------------
 // VISUALIZATION 1: 2D SPATIAL HEATMAP / CONTOUR CANVAS
 // ----------------------------------------------------------------------------
 
 function render2DContour(res) {
   const canvas = document.getElementById("contourCanvas");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
+  if (!canvas || !res) return;
+  const { ctx, width, height, isSmall, isMed } = setupResponsiveCanvas(canvas, 900 / 480);
 
   // Clear canvas
   ctx.fillStyle = "#0c1322";
@@ -819,13 +875,13 @@ function render2DContour(res) {
   const yMin = yVec[0];
   const yMax = yVec[yVec.length - 1];
 
-  // Margins for axes
-  const padL = 60;
-  const padR = 85; // space for colorbar
-  const padT = 30;
-  const padB = 45;
-  const plotW = width - padL - padR;
-  const plotH = height - padT - padB;
+  // Responsive margins for axes
+  const padL = isSmall ? 38 : (isMed ? 48 : 60);
+  const padR = isSmall ? 52 : (isMed ? 68 : 85);
+  const padT = isSmall ? 26 : 30;
+  const padB = isSmall ? 36 : 45;
+  const plotW = Math.max(width - padL - padR, 50);
+  const plotH = Math.max(height - padT - padB, 50);
 
   function toScreenX(x) {
     return padL + ((x - xMin) / (xMax - xMin)) * plotW;
@@ -959,42 +1015,44 @@ function render2DContour(res) {
   ctx.strokeRect(padL, padT, plotW, plotH);
 
   // X-axis ticks & labels
+  const numXTicks = isSmall ? 3 : (isMed ? 4 : 6);
   ctx.fillStyle = "#9aa5c4";
-  ctx.font = "11px Consolas, monospace";
+  ctx.font = isSmall ? "9px Consolas, monospace" : "11px Consolas, monospace";
   ctx.textAlign = "center";
-  const numXTicks = 6;
   for (let i = 0; i <= numXTicks; i++) {
     const xVal = xMin + (i / numXTicks) * (xMax - xMin);
     const sx = toScreenX(xVal);
     ctx.beginPath();
     ctx.moveTo(sx, padT + plotH);
-    ctx.lineTo(sx, padT + plotH + 5);
+    ctx.lineTo(sx, padT + plotH + (isSmall ? 4 : 5));
     ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
     ctx.stroke();
-    ctx.fillText(`${Math.round(xVal)}m`, sx, padT + plotH + 18);
+    ctx.fillText(`${Math.round(xVal)}m`, sx, padT + plotH + (isSmall ? 14 : 18));
   }
-  ctx.fillText("Downwind Distance x (meters)", padL + plotW / 2, padT + plotH + 36);
+  const xTitle = isSmall ? "Downwind x (m)" : "Downwind Distance x (meters)";
+  ctx.fillText(xTitle, padL + plotW / 2, padT + plotH + (isSmall ? 28 : 36));
 
   // Y-axis ticks & labels
   ctx.textAlign = "right";
-  const numYTicks = 5;
+  const numYTicks = isSmall ? 3 : 5;
   for (let i = 0; i <= numYTicks; i++) {
     const yVal = yMin + (i / numYTicks) * (yMax - yMin);
     const sy = toScreenY(yVal);
     ctx.beginPath();
-    ctx.moveTo(padL - 5, sy);
+    ctx.moveTo(padL - (isSmall ? 4 : 5), sy);
     ctx.lineTo(padL, sy);
     ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
     ctx.stroke();
-    ctx.fillText(`${yVal.toFixed(0)}m`, padL - 8, sy + 4);
+    ctx.fillText(`${yVal.toFixed(0)}m`, padL - (isSmall ? 4 : 8), sy + 4);
   }
 
   // Y-axis title (rotated)
   ctx.save();
-  ctx.translate(16, padT + plotH / 2);
+  ctx.translate(isSmall ? 10 : 16, padT + plotH / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.textAlign = "center";
-  ctx.fillText("Crosswind y (meters)", 0, 0);
+  ctx.font = isSmall ? "9px Segoe UI, sans-serif" : "11px Segoe UI, sans-serif";
+  ctx.fillText(isSmall ? "Crosswind y (m)" : "Crosswind y (meters)", 0, 0);
   ctx.restore();
 
   // 4. Mark Advection Wavefront / Center
@@ -1002,8 +1060,8 @@ function render2DContour(res) {
   if (frontX >= xMin && frontX <= xMax) {
     const sFrontX = toScreenX(frontX);
     ctx.strokeStyle = "#4cc9f0";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = isSmall ? 1.5 : 2;
+    ctx.setLineDash([5, 3]);
     ctx.beginPath();
     ctx.moveTo(sFrontX, padT);
     ctx.lineTo(sFrontX, padT + plotH);
@@ -1011,10 +1069,12 @@ function render2DContour(res) {
     ctx.setLineDash([]);
 
     ctx.fillStyle = "#4cc9f0";
-    ctx.font = "10px Segoe UI, sans-serif";
+    ctx.font = isSmall ? "9px Segoe UI, sans-serif" : "10px Segoe UI, sans-serif";
     ctx.textAlign = "center";
-    const label = inp.model_type === "plume" ? `Plume Front (${frontX.toFixed(0)}m)` : `Puff Center (${frontX.toFixed(0)}m)`;
-    ctx.fillText(label, sFrontX, padT - 8);
+    const label = inp.model_type === "plume"
+      ? (isSmall ? `Front ${frontX.toFixed(0)}m` : `Plume Front (${frontX.toFixed(0)}m)`)
+      : (isSmall ? `Puff ${frontX.toFixed(0)}m` : `Puff Center (${frontX.toFixed(0)}m)`);
+    ctx.fillText(label, sFrontX, padT - 6);
   }
 
   // 5. Mark Release Source (0, 0)
@@ -1023,15 +1083,17 @@ function render2DContour(res) {
   if (sourceSX >= padL && sourceSX <= padL + plotW) {
     ctx.fillStyle = "#f72585";
     ctx.beginPath();
-    ctx.arc(sourceSX, sourceSY, 6, 0, 2 * Math.PI);
+    ctx.arc(sourceSX, sourceSY, isSmall ? 4 : 6, 0, 2 * Math.PI);
     ctx.fill();
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 10px Segoe UI, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(" Source (0,0)", sourceSX + 7, sourceSY + 4);
+    if (!isSmall) {
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 10px Segoe UI, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(" Source (0,0)", sourceSX + 7, sourceSY + 4);
+    }
   }
 
   // 6. Mark Monitoring Query Station (x_query, y_query)
@@ -1041,36 +1103,35 @@ function render2DContour(res) {
     // Crosshair circle
     ctx.fillStyle = pt.exceeds ? "#ff2a5f" : "#06d6a0";
     ctx.beginPath();
-    ctx.arc(querySX, querySY, 7, 0, 2 * Math.PI);
+    ctx.arc(querySX, querySY, isSmall ? 5 : 7, 0, 2 * Math.PI);
     ctx.fill();
     ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.8;
     ctx.stroke();
 
     // Pulse effect ring
     ctx.strokeStyle = pt.exceeds ? "rgba(255, 42, 95, 0.5)" : "rgba(6, 214, 160, 0.5)";
     ctx.beginPath();
-    ctx.arc(querySX, querySY, 13, 0, 2 * Math.PI);
+    ctx.arc(querySX, querySY, isSmall ? 9 : 13, 0, 2 * Math.PI);
     ctx.stroke();
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 11px Segoe UI, sans-serif";
+    ctx.font = isSmall ? "bold 9px Segoe UI, sans-serif" : "bold 11px Segoe UI, sans-serif";
     ctx.textAlign = inp.x_query > (xMax + xMin) / 2 ? "right" : "left";
-    const offset = inp.x_query > (xMax + xMin) / 2 ? -15 : 15;
-    ctx.fillText(
-      `Station (${inp.x_query.toFixed(0)}m, ${inp.y_query.toFixed(0)}m): ${formatSci(pt.c_ppm, 3)} ppm`,
-      querySX + offset,
-      querySY - 12
-    );
+    const offset = inp.x_query > (xMax + xMin) / 2 ? (isSmall ? -10 : -15) : (isSmall ? 10 : 15);
+    const stationText = isSmall
+      ? `Station: ${formatSci(pt.c_ppm, 2)} ppm`
+      : `Station (${inp.x_query.toFixed(0)}m, ${inp.y_query.toFixed(0)}m): ${formatSci(pt.c_ppm, 3)} ppm`;
+    ctx.fillText(stationText, querySX + offset, querySY - 10);
   }
 
   // 7. Draw Colorbar Legend
-  const cbL = width - padR + 15;
-  const cbW = 16;
+  const cbL = width - padR + (isSmall ? 8 : 15);
+  const cbW = isSmall ? 10 : 16;
   const cbT = padT;
   const cbH = plotH;
 
-  const cbSteps = 60;
+  const cbSteps = 50;
   for (let i = 0; i <= cbSteps; i++) {
     const val = (1.0 - i / cbSteps) * maxPpm;
     const sy = cbT + (i / cbSteps) * cbH;
@@ -1082,29 +1143,30 @@ function render2DContour(res) {
 
   // Colorbar labels
   ctx.fillStyle = "#e8ecf8";
-  ctx.font = "10px Consolas, monospace";
+  ctx.font = isSmall ? "8px Consolas, monospace" : "10px Consolas, monospace";
   ctx.textAlign = "left";
-  ctx.fillText(`${formatSci(maxPpm, 2)}`, cbL + cbW + 6, cbT + 10);
-  ctx.fillText(`${formatSci(maxPpm * 0.5, 2)}`, cbL + cbW + 6, cbT + cbH / 2 + 4);
-  ctx.fillText(`0.00 ppm`, cbL + cbW + 6, cbT + cbH);
+  ctx.fillText(`${formatSci(maxPpm, 2)}`, cbL + cbW + 4, cbT + 8);
+  ctx.fillText(`${formatSci(maxPpm * 0.5, 2)}`, cbL + cbW + 4, cbT + cbH / 2 + 3);
+  ctx.fillText(isSmall ? "0" : "0.00 ppm", cbL + cbW + 4, cbT + cbH);
 
-  ctx.save();
-  ctx.translate(cbL + cbW + 42, cbT + cbH / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.textAlign = "center";
-  ctx.font = "11px Segoe UI, sans-serif";
-  ctx.fillText("ppm", 0, 0);
-  ctx.restore();
+  if (!isSmall) {
+    ctx.save();
+    ctx.translate(cbL + cbW + 36, cbT + cbH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = "center";
+    ctx.font = "11px Segoe UI, sans-serif";
+    ctx.fillText("ppm", 0, 0);
+    ctx.restore();
+  }
 
   // 8. Title Header
   ctx.fillStyle = "#e8ecf8";
-  ctx.font = "bold 13px Segoe UI, sans-serif";
+  ctx.font = isSmall ? "bold 10px Segoe UI, sans-serif" : "bold 13px Segoe UI, sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText(
-    `2D Concentration Contour Map at t = ${inp.t_query.toFixed(1)} s (z = ${inp.z_query.toFixed(1)} m) — Peak: ${formatSci(maxPpm, 2)} ppm`,
-    padL,
-    18
-  );
+  const titleText = isSmall
+    ? `2D Contour @ t=${inp.t_query.toFixed(0)}s | Peak: ${formatSci(maxPpm, 2)} ppm`
+    : `2D Concentration Contour Map at t = ${inp.t_query.toFixed(1)} s (z = ${inp.z_query.toFixed(1)} m) — Peak: ${formatSci(maxPpm, 2)} ppm`;
+  ctx.fillText(titleText, padL, isSmall ? 15 : 18);
 
   // Store coordinates mapping on canvas element for interactive hover tooltip
   canvas._toDataX = toDataX;
@@ -1113,6 +1175,8 @@ function render2DContour(res) {
   canvas._padR = padR;
   canvas._padT = padT;
   canvas._padB = padB;
+  canvas._plotW = plotW;
+  canvas._plotH = plotH;
 }
 
 // ----------------------------------------------------------------------------
@@ -1121,10 +1185,8 @@ function render2DContour(res) {
 
 function renderBreakthroughChart(res) {
   const canvas = document.getElementById("timeCanvas");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
+  if (!canvas || !res) return;
+  const { ctx, width, height, isSmall, isMed } = setupResponsiveCanvas(canvas, 900 / 420);
 
   ctx.fillStyle = "#0c1322";
   ctx.fillRect(0, 0, width, height);
@@ -1139,12 +1201,12 @@ function renderBreakthroughChart(res) {
   const tMax = tVec[tVec.length - 1];
   const maxC = Math.max(...cVec, thresh * 1.25, 0.01);
 
-  const padL = 65;
-  const padR = 30;
-  const padT = 36;
-  const padB = 45;
-  const plotW = width - padL - padR;
-  const plotH = height - padT - padB;
+  const padL = isSmall ? 44 : 65;
+  const padR = isSmall ? 16 : 30;
+  const padT = isSmall ? 26 : 36;
+  const padB = isSmall ? 34 : 45;
+  const plotW = Math.max(width - padL - padR, 50);
+  const plotH = Math.max(height - padT - padB, 50);
 
   function toX(t) {
     return padL + ((t - tMin) / (tMax - tMin)) * plotW;
@@ -1156,7 +1218,7 @@ function renderBreakthroughChart(res) {
   // Gridlines
   ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
   ctx.lineWidth = 1;
-  const nTicks = 6;
+  const nTicks = isSmall ? 4 : 6;
   for (let i = 0; i <= nTicks; i++) {
     const tVal = tMin + (i / nTicks) * (tMax - tMin);
     const sx = toX(tVal);
@@ -1166,13 +1228,14 @@ function renderBreakthroughChart(res) {
     ctx.stroke();
 
     ctx.fillStyle = "#9aa5c4";
-    ctx.font = "11px Consolas, monospace";
+    ctx.font = isSmall ? "9px Consolas, monospace" : "11px Consolas, monospace";
     ctx.textAlign = "center";
-    ctx.fillText(`${tVal.toFixed(0)}s`, sx, padT + plotH + 18);
+    ctx.fillText(`${tVal.toFixed(0)}s`, sx, padT + plotH + (isSmall ? 14 : 18));
   }
 
-  for (let i = 0; i <= 5; i++) {
-    const cVal = (i / 5) * maxC;
+  const yTicks = isSmall ? 3 : 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const cVal = (i / yTicks) * maxC;
     const sy = toY(cVal);
     ctx.beginPath();
     ctx.moveTo(padL, sy);
@@ -1180,9 +1243,9 @@ function renderBreakthroughChart(res) {
     ctx.stroke();
 
     ctx.fillStyle = "#9aa5c4";
-    ctx.font = "11px Consolas, monospace";
+    ctx.font = isSmall ? "9px Consolas, monospace" : "11px Consolas, monospace";
     ctx.textAlign = "right";
-    ctx.fillText(`${formatSci(cVal, 2)}`, padL - 8, sy + 4);
+    ctx.fillText(`${formatSci(cVal, 2)}`, padL - (isSmall ? 4 : 8), sy + 4);
   }
 
   // Axis lines
@@ -1191,22 +1254,22 @@ function renderBreakthroughChart(res) {
 
   // Axis titles
   ctx.fillStyle = "#9aa5c4";
-  ctx.font = "12px Segoe UI, sans-serif";
+  ctx.font = isSmall ? "10px Segoe UI, sans-serif" : "12px Segoe UI, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("Time Elapsed Since Release t (seconds)", padL + plotW / 2, padT + plotH + 36);
+  ctx.fillText(isSmall ? "Time t (seconds)" : "Time Elapsed Since Release t (seconds)", padL + plotW / 2, padT + plotH + (isSmall ? 28 : 36));
 
   ctx.save();
-  ctx.translate(16, padT + plotH / 2);
+  ctx.translate(isSmall ? 10 : 16, padT + plotH / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText("Concentration (ppm)", 0, 0);
+  ctx.fillText(isSmall ? "C (ppm)" : "Concentration (ppm)", 0, 0);
   ctx.restore();
 
   // Hazard threshold line
   if (thresh <= maxC) {
     const threshY = toY(thresh);
     ctx.strokeStyle = "#ff2a5f";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 5]);
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([5, 4]);
     ctx.beginPath();
     ctx.moveTo(padL, threshY);
     ctx.lineTo(padL + plotW, threshY);
@@ -1214,15 +1277,15 @@ function renderBreakthroughChart(res) {
     ctx.setLineDash([]);
 
     ctx.fillStyle = "#ff2a5f";
-    ctx.font = "bold 11px Segoe UI, sans-serif";
+    ctx.font = isSmall ? "bold 9px Segoe UI, sans-serif" : "bold 11px Segoe UI, sans-serif";
     ctx.textAlign = "right";
-    ctx.fillText(`Hazard Threshold (${thresh.toFixed(2)} ppm)`, padL + plotW - 10, threshY - 6);
+    ctx.fillText(`Limit (${thresh.toFixed(2)} ppm)`, padL + plotW - 6, threshY - 5);
   }
 
   // Evaluated time t_query vertical marker
   const evalX = toX(inp.t_query);
   ctx.strokeStyle = "#4cc9f0";
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1.8;
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
   ctx.moveTo(evalX, padT);
@@ -1231,9 +1294,9 @@ function renderBreakthroughChart(res) {
   ctx.setLineDash([]);
 
   ctx.fillStyle = "#4cc9f0";
-  ctx.font = "11px Segoe UI, sans-serif";
+  ctx.font = isSmall ? "9px Segoe UI, sans-serif" : "11px Segoe UI, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(`t = ${inp.t_query.toFixed(1)}s`, evalX, padT - 8);
+  ctx.fillText(`t=${inp.t_query.toFixed(1)}s`, evalX, padT - 6);
 
   // Fill area under curve
   ctx.beginPath();
@@ -1251,7 +1314,7 @@ function renderBreakthroughChart(res) {
 
   // Draw C(t) Curve
   ctx.strokeStyle = "#4cc9f0";
-  ctx.lineWidth = 2.8;
+  ctx.lineWidth = 2.4;
   ctx.beginPath();
   for (let i = 0; i < tVec.length; i++) {
     const sx = toX(tVec[i]);
@@ -1265,21 +1328,20 @@ function renderBreakthroughChart(res) {
   const currentSY = toY(pt.c_ppm);
   ctx.fillStyle = pt.exceeds ? "#ff2a5f" : "#06d6a0";
   ctx.beginPath();
-  ctx.arc(evalX, currentSY, 6, 0, 2 * Math.PI);
+  ctx.arc(evalX, currentSY, isSmall ? 4.5 : 6, 0, 2 * Math.PI);
   ctx.fill();
   ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1.8;
   ctx.stroke();
 
   // Title header
   ctx.fillStyle = "#e8ecf8";
-  ctx.font = "bold 13px Segoe UI, sans-serif";
+  ctx.font = isSmall ? "bold 10px Segoe UI, sans-serif" : "bold 13px Segoe UI, sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText(
-    `Breakthrough Curve C(t) at Station (x = ${inp.x_query.toFixed(0)}m, y = ${inp.y_query.toFixed(0)}m, z = ${inp.z_query.toFixed(1)}m)`,
-    padL,
-    18
-  );
+  const title = isSmall
+    ? `C(t) @ Station — Peak: ${formatSci(pt.peak_ppm, 2)} ppm`
+    : `Breakthrough Curve C(t) at Station (x = ${inp.x_query.toFixed(0)}m, y = ${inp.y_query.toFixed(0)}m, z = ${inp.z_query.toFixed(1)}m)`;
+  ctx.fillText(title, padL, isSmall ? 15 : 18);
 }
 
 // ----------------------------------------------------------------------------
@@ -1288,10 +1350,8 @@ function renderBreakthroughChart(res) {
 
 function renderProfilesChart(res) {
   const canvas = document.getElementById("profileCanvas");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
+  if (!canvas || !res) return;
+  const { ctx, width, height, isSmall, isMed } = setupResponsiveCanvas(canvas, 900 / 420);
 
   ctx.fillStyle = "#0c1322";
   ctx.fillRect(0, 0, width, height);
@@ -1306,12 +1366,12 @@ function renderProfilesChart(res) {
   const xMax = xData[xData.length - 1];
   const maxC = Math.max(...yData, inp.c_target_ppm * 1.15, 0.01);
 
-  const padL = 65;
-  const padR = 30;
-  const padT = 36;
-  const padB = 45;
-  const plotW = width - padL - padR;
-  const plotH = height - padT - padB;
+  const padL = isSmall ? 44 : 65;
+  const padR = isSmall ? 16 : 30;
+  const padT = isSmall ? 26 : 36;
+  const padB = isSmall ? 34 : 45;
+  const plotW = Math.max(width - padL - padR, 50);
+  const plotH = Math.max(height - padT - padB, 50);
 
   function toX(x) {
     return padL + ((x - xMin) / (xMax - xMin)) * plotW;
@@ -1323,7 +1383,7 @@ function renderProfilesChart(res) {
   // Grid
   ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
   ctx.lineWidth = 1;
-  const nTicks = 6;
+  const nTicks = isSmall ? 4 : 6;
   for (let i = 0; i <= nTicks; i++) {
     const v = xMin + (i / nTicks) * (xMax - xMin);
     const sx = toX(v);
@@ -1333,13 +1393,14 @@ function renderProfilesChart(res) {
     ctx.stroke();
 
     ctx.fillStyle = "#9aa5c4";
-    ctx.font = "11px Consolas, monospace";
+    ctx.font = isSmall ? "9px Consolas, monospace" : "11px Consolas, monospace";
     ctx.textAlign = "center";
-    ctx.fillText(`${v.toFixed(0)}m`, sx, padT + plotH + 18);
+    ctx.fillText(`${v.toFixed(0)}m`, sx, padT + plotH + (isSmall ? 14 : 18));
   }
 
-  for (let i = 0; i <= 5; i++) {
-    const cVal = (i / 5) * maxC;
+  const yTicks = isSmall ? 3 : 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const cVal = (i / yTicks) * maxC;
     const sy = toY(cVal);
     ctx.beginPath();
     ctx.moveTo(padL, sy);
@@ -1347,9 +1408,9 @@ function renderProfilesChart(res) {
     ctx.stroke();
 
     ctx.fillStyle = "#9aa5c4";
-    ctx.font = "11px Consolas, monospace";
+    ctx.font = isSmall ? "9px Consolas, monospace" : "11px Consolas, monospace";
     ctx.textAlign = "right";
-    ctx.fillText(`${formatSci(cVal, 2)}`, padL - 8, sy + 4);
+    ctx.fillText(`${formatSci(cVal, 2)}`, padL - (isSmall ? 4 : 8), sy + 4);
   }
 
   // Border
@@ -1358,17 +1419,22 @@ function renderProfilesChart(res) {
 
   // Labels
   ctx.fillStyle = "#9aa5c4";
-  ctx.font = "12px Segoe UI, sans-serif";
+  ctx.font = isSmall ? "10px Segoe UI, sans-serif" : "12px Segoe UI, sans-serif";
   ctx.textAlign = "center";
-  const xLabel = isCrosswind
-    ? "Crosswind Distance y (meters) at x = " + inp.x_query.toFixed(0) + "m"
-    : "Centerline Downwind Distance x (meters) at y = 0";
-  ctx.fillText(xLabel, padL + plotW / 2, padT + plotH + 36);
+  let xLabel = "";
+  if (isSmall) {
+    xLabel = isCrosswind ? `Crosswind y (m) @ x=${inp.x_query.toFixed(0)}m` : "Downwind x (m) @ y=0";
+  } else {
+    xLabel = isCrosswind
+      ? "Crosswind Distance y (meters) at x = " + inp.x_query.toFixed(0) + "m"
+      : "Centerline Downwind Distance x (meters) at y = 0";
+  }
+  ctx.fillText(xLabel, padL + plotW / 2, padT + plotH + (isSmall ? 28 : 36));
 
   ctx.save();
-  ctx.translate(16, padT + plotH / 2);
+  ctx.translate(isSmall ? 10 : 16, padT + plotH / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText("Concentration (ppm)", 0, 0);
+  ctx.fillText(isSmall ? "C (ppm)" : "Concentration (ppm)", 0, 0);
   ctx.restore();
 
   // Hazard line
@@ -1399,7 +1465,7 @@ function renderProfilesChart(res) {
   ctx.fill();
 
   ctx.strokeStyle = isCrosswind ? "#ffd166" : "#06d6a0";
-  ctx.lineWidth = 2.6;
+  ctx.lineWidth = 2.4;
   ctx.beginPath();
   for (let i = 0; i < xData.length; i++) {
     const sx = toX(xData[i]);
@@ -1415,20 +1481,22 @@ function renderProfilesChart(res) {
   const markSY = toY(pt.c_ppm);
   ctx.fillStyle = pt.exceeds ? "#ff2a5f" : "#06d6a0";
   ctx.beginPath();
-  ctx.arc(markSX, markSY, 6, 0, 2 * Math.PI);
+  ctx.arc(markSX, markSY, isSmall ? 4.5 : 6, 0, 2 * Math.PI);
   ctx.fill();
   ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1.8;
   ctx.stroke();
 
   // Title
   ctx.fillStyle = "#e8ecf8";
-  ctx.font = "bold 13px Segoe UI, sans-serif";
+  ctx.font = isSmall ? "bold 10px Segoe UI, sans-serif" : "bold 13px Segoe UI, sans-serif";
   ctx.textAlign = "left";
-  const title = isCrosswind
-    ? `Crosswind Gaussian Profile C(y) at x = ${inp.x_query.toFixed(0)}m, t = ${inp.t_query.toFixed(1)}s`
-    : `Downwind Centerline Profile C(x) at y = 0, t = ${inp.t_query.toFixed(1)}s`;
-  ctx.fillText(title, padL, 18);
+  const title = isSmall
+    ? `Profile C(${isCrosswind ? "y" : "x"}) — Peak: ${formatSci(Math.max(...yData), 2)} ppm`
+    : (isCrosswind
+      ? `Crosswind Gaussian Profile C(y) at x = ${inp.x_query.toFixed(0)}m, t = ${inp.t_query.toFixed(1)}s`
+      : `Downwind Centerline Profile C(x) at y = 0, t = ${inp.t_query.toFixed(1)}s`);
+  ctx.fillText(title, padL, isSmall ? 15 : 18);
 }
 
 // ----------------------------------------------------------------------------
@@ -1441,28 +1509,28 @@ function updateReportText(res) {
   const p = res.point;
   const inp = res.inputs;
 
-  const text = `===========================================================================
-   POINT CONCENTRATION REPORT AT t = ${inp.t_query.toFixed(1)} SECONDS
-===========================================================================
+  const text = `------------------------------------------------
+   POINT CONCENTRATION REPORT AT t = ${inp.t_query.toFixed(1)} s
+------------------------------------------------
 Chemical & Model         : ${inp.chem_name} (${inp.model_type.toUpperCase()} Model)
 Molecular Weight (MW)    : ${inp.mw_g_mol.toFixed(2)} g/mol
 Release Strength         : ${inp.source_strength} ${inp.model_type === "plume" ? "kg/s" : "kg"}
 Atmospheric Wind Speed   : ${inp.u_wind.toFixed(2)} m/s
 Stability & Terrain      : Class ${inp.stability} | ${inp.terrain.toUpperCase()} terrain
 Effective Release Height : Hr = ${inp.hr_m.toFixed(2)} m
----------------------------------------------------------------------------
+------------------------------------------------
 Target Receptor Location : x = ${inp.x_query.toFixed(1)} m, y = ${inp.y_query.toFixed(1)} m, z = ${inp.z_query.toFixed(1)} m
 Advection Front / Center : x_front = ${p.advection_front_m.toFixed(1)} m (at t = ${inp.t_query.toFixed(1)} s)
 Expected Arrival Time    : t_arrival = ${p.t_arrival_sec.toFixed(1)} s
 Dispersion Coefficients  : σy = ${p.sigmas.sy.toFixed(2)} m, σz = ${p.sigmas.sz.toFixed(2)} m
----------------------------------------------------------------------------
+------------------------------------------------
 Concentration (kg/m³)    : ${p.c_kg_m3.toExponential(6)} kg/m³
 Concentration (mg/m³)    : ${p.c_mg_m3.toFixed(4)} mg/m³
 Concentration (ppm)      : ${p.c_ppm.toFixed(4)} ppm
 Hazard Limit Threshold   : ${inp.c_target_ppm.toFixed(4)} ppm
 Hazard Status            : ${p.exceeds ? "EXCEEDS THRESHOLD! (DANGER)" : "Below Threshold (SAFE)"}
 Peak Concentration @ Rec : ${p.peak_ppm.toFixed(4)} ppm at t = ${p.t_peak_sec.toFixed(1)} s
-===========================================================================`;
+------------------------------------------------`;
 
   box.innerText = text;
 }
@@ -1797,6 +1865,69 @@ document.addEventListener("DOMContentLoaded", () => {
   if (runBtn) {
     runBtn.addEventListener("click", () => {
       runSimulation();
+      if (window.innerWidth <= 900) {
+        setMobileView("results");
+        const simResults = document.querySelector(".sim-results");
+        if (simResults) {
+          simResults.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    });
+  }
+
+  // Mobile Simulator View Switcher Navigation
+  function setMobileView(view) {
+    const simGrid = document.getElementById("simGrid");
+    const btnControls = document.getElementById("btnMobControls");
+    const btnResults = document.getElementById("btnMobResults");
+    if (!simGrid) return;
+
+    if (view === "results") {
+      simGrid.classList.remove("view-controls");
+      simGrid.classList.add("view-results");
+      if (btnControls) btnControls.classList.remove("active");
+      if (btnResults) btnResults.classList.add("active");
+      requestAnimationFrame(() => {
+        renderActiveVisualization();
+      });
+    } else {
+      simGrid.classList.remove("view-results");
+      simGrid.classList.add("view-controls");
+      if (btnControls) btnControls.classList.add("active");
+      if (btnResults) btnResults.classList.remove("active");
+    }
+  }
+
+  const btnMobControls = document.getElementById("btnMobControls");
+  const btnMobResults = document.getElementById("btnMobResults");
+  const mobJumpResultsBtn = document.getElementById("mobJumpResultsBtn");
+  const mobBackControlsBtn = document.getElementById("mobBackControlsBtn");
+
+  if (btnMobControls) {
+    btnMobControls.addEventListener("click", () => {
+      setMobileView("controls");
+      document.getElementById("simulator")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  if (btnMobResults) {
+    btnMobResults.addEventListener("click", () => {
+      setMobileView("results");
+      document.getElementById("simulator")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  if (mobJumpResultsBtn) {
+    mobJumpResultsBtn.addEventListener("click", () => {
+      setMobileView("results");
+      document.querySelector(".sim-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  if (mobBackControlsBtn) {
+    mobBackControlsBtn.addEventListener("click", () => {
+      setMobileView("controls");
+      document.querySelector(".sim-controls")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 
@@ -1852,23 +1983,84 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Canvas Mouse Hover Tooltip on 2D Contour
+  // Mobile Navigation Hamburger Toggle
+  const navToggle = document.getElementById("navToggle");
+  const navMenu = document.getElementById("navMenu");
+  if (navToggle && navMenu) {
+    navToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = navMenu.classList.toggle("open");
+      navToggle.classList.toggle("open", isOpen);
+      navToggle.setAttribute("aria-expanded", String(isOpen));
+    });
+
+    // Close mobile nav when clicking any nav link
+    document.querySelectorAll(".nav-link").forEach((link) => {
+      link.addEventListener("click", () => {
+        navMenu.classList.remove("open");
+        navToggle.classList.remove("open");
+        navToggle.setAttribute("aria-expanded", "false");
+      });
+    });
+
+    // Close when clicking outside
+    document.addEventListener("click", (e) => {
+      if (!navMenu.contains(e.target) && !navToggle.contains(e.target)) {
+        navMenu.classList.remove("open");
+        navToggle.classList.remove("open");
+        navToggle.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  // Floating Quick Actions (Mobile / Tablet)
+  const floatingActions = document.getElementById("floatingActions");
+  const btnBackToTop = document.getElementById("btnBackToTop");
+  if (floatingActions) {
+    window.addEventListener("scroll", () => {
+      if (window.scrollY > 350) {
+        floatingActions.classList.add("visible");
+      } else {
+        floatingActions.classList.remove("visible");
+      }
+    }, { passive: true });
+  }
+
+  if (btnBackToTop) {
+    btnBackToTop.addEventListener("click", () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  // Window Resize & Orientation Change Listener (debounced)
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      renderActiveVisualization();
+    }, 180);
+  });
+  window.addEventListener("orientationchange", () => {
+    setTimeout(() => {
+      renderActiveVisualization();
+    }, 250);
+  });
+
+  // Canvas Mouse & Touch Hover Tooltip on 2D Contour
   const contourCanvas = document.getElementById("contourCanvas");
   const tooltip = document.getElementById("contourTooltip");
   if (contourCanvas && tooltip) {
-    contourCanvas.addEventListener("mousemove", (e) => {
+    const handlePointerInspect = (clientX, clientY) => {
       if (!contourCanvas._toDataX) return;
       const rect = contourCanvas.getBoundingClientRect();
-      const scaleX = contourCanvas.width / rect.width;
-      const scaleY = contourCanvas.height / rect.height;
-      const px = (e.clientX - rect.left) * scaleX;
-      const py = (e.clientY - rect.top) * scaleY;
+      const px = clientX - rect.left;
+      const py = clientY - rect.top;
 
       if (
         px < contourCanvas._padL ||
-        px > contourCanvas.width - contourCanvas._padR ||
+        px > (contourCanvas._padL + contourCanvas._plotW) ||
         py < contourCanvas._padT ||
-        py > contourCanvas.height - contourCanvas._padB
+        py > (contourCanvas._padT + contourCanvas._plotH)
       ) {
         tooltip.style.display = "none";
         return;
@@ -1894,17 +2086,52 @@ document.addEventListener("DOMContentLoaded", () => {
       const ppm = (c_kg * 24.45 * 1e6) / inp.mw_g_mol;
 
       tooltip.style.display = "block";
-      tooltip.style.left = `${e.clientX + 14}px`;
-      tooltip.style.top = `${e.clientY - 28}px`;
+
+      // Viewport bounds-aware positioning (never overflow screen on phones)
+      const approxW = 210;
+      let left = clientX + 14;
+      if (left + approxW > window.innerWidth - 12) {
+        left = clientX - approxW - 14;
+      }
+      left = Math.max(left, 10);
+
+      let top = clientY - 50;
+      if (top < 10) {
+        top = clientY + 20;
+      }
+
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
       tooltip.innerHTML = `
         <strong>Downwind x:</strong> ${dataX.toFixed(1)} m<br/>
         <strong>Crosswind y:</strong> ${dataY.toFixed(1)} m<br/>
         <strong>Concentration:</strong> ${formatSci(ppm, 3)} ppm
       `;
+    };
+
+    contourCanvas.addEventListener("mousemove", (e) => {
+      handlePointerInspect(e.clientX, e.clientY);
     });
 
-    contourCanvas.addEventListener("mouseleave", () => {
+    contourCanvas.addEventListener("touchstart", (e) => {
+      if (e.touches && e.touches.length > 0) {
+        handlePointerInspect(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    contourCanvas.addEventListener("touchmove", (e) => {
+      if (e.touches && e.touches.length > 0) {
+        handlePointerInspect(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    const hideTooltip = () => {
       tooltip.style.display = "none";
+    };
+
+    contourCanvas.addEventListener("mouseleave", hideTooltip);
+    contourCanvas.addEventListener("touchend", () => {
+      setTimeout(hideTooltip, 2400);
     });
   }
 
